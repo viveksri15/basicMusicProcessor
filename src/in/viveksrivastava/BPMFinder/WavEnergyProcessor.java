@@ -1,0 +1,61 @@
+package in.viveksrivastava.BPMFinder;
+
+import java.util.LinkedList;
+import java.util.Queue;
+
+import javazoom.jl.decoder.JavaLayerException;
+
+import com.musicg.wave.Wave;
+
+/**
+ *
+ * @author Vivek Srivastava
+ */
+class WavEnergyProcessor extends EnergyProcessor {
+	private int averageLength = 1024; // number of samples over which the average is calculated
+	private Queue<Short> instantBuffer = new LinkedList<Short>();
+	Wave waveFile = null;
+
+	public WavEnergyProcessor(SoundProcessor<Long> processor,
+                              SoundProcessor<Short> processor2, String fileName) {
+		super(processor, processor2);
+		waveFile = new Wave(fileName);
+		channels = waveFile.getWaveHeader().getChannels();
+		freq = waveFile.getWaveHeader().getSampleRate();
+		samplesPerMillisecond = (freq * channels) / 1000;
+		if (processor1 != null)
+			processor1.init(freq, channels);
+	}
+
+	public void start() throws JavaLayerException {
+		outputImpl(waveFile.getSampleAmplitudes(), 0,
+				waveFile.getSampleAmplitudes().length);
+	}
+
+	@Override
+	protected void outputImpl(short[] samples, int offs, int len)
+			throws JavaLayerException {
+		SoundProcessor<Short> processor2 = getProcessor2();
+		for (int i = 0; i < len; i++) {
+			instantBuffer.offer(samples[i]);
+			processor2.start(new Short[]{samples[i]});
+		}
+
+		SoundProcessor<Long> processor = getProcessor1();
+		while (instantBuffer.size() > averageLength * channels) {
+			long energy = 0;
+			for (int i = 0; i < averageLength * channels; i++)
+				energy += Math.pow(instantBuffer.poll(), 2);
+			if (processor != null)
+				processor.start(new Long[]{energy});
+		}
+	}
+
+	public int getAverageLength() {
+		return averageLength;
+	}
+
+	public void setAverageLength(int averageLength) {
+		this.averageLength = averageLength;
+	}
+}
